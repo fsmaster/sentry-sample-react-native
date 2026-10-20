@@ -1,97 +1,97 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Sentry + React Native
 
-# Getting Started
+React Native 0.88 app (bare, no Expo), Android only here. The release bundle is minified Hermes bytecode,
+the source map uploaded during the Gradle build gives back `App.tsx` with line numbers.
+Part of [Sentry Playground](https://github.com/fsmaster/sentry-playground). The playground button runs the
+workflow of this repo: build → emulator → error.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+![Issue in Sentry](docs/img/issue.png)
 
-## Step 1: Start Metro
+## What you need
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- Node 22+, JDK 17, Android SDK (Android Studio), emulator or phone
+- Sentry project with platform **React Native**
+- Sentry auth token: **Settings → Auth Tokens → Create New Token**
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## 1. Install and set DSN
 
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
+```bash
+git clone https://github.com/fsmaster/sentry-sample-react-native.git
+cd sentry-sample-react-native
+npm ci
 ```
 
-## Step 2: Build and run your app
+Put your DSN into `App.tsx` (`Sentry.init({ dsn: ... })`) and your org/project into
+`android/sentry.properties`:
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```properties
+defaults.url=https://sentry.io/
+defaults.org=<your-org>
+defaults.project=<your-project>
 ```
 
-### iOS
+## 2. Build release
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```bash
+export SENTRY_AUTH_TOKEN=sntrys_...
+cd android
+./gradlew assembleRelease -PreactNativeArchitectures=x86_64
 ```
 
-Then, and every time you update your native dependencies, run:
+`-PreactNativeArchitectures=x86_64` only builds for emulator and is much faster, drop it for a phone.
+End of the log:
 
-```sh
-bundle exec pod install
+```
+Uploading sourcemaps for release com.sentrysample@1.0+1 distribution 1
+> Uploaded files to Sentry
+Source Map Upload Report
+    ~/index.android.bundle (sourcemap at index.android.bundle.map, debug id 138392c4-...)
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## 3. Run
 
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+```bash
+adb install -r app/build/outputs/apk/release/app-release.apk
+adb shell am start -a android.intent.action.VIEW -d "sentrysample://run?id=test-1" com.sentrysample
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+The deep link makes the app send one error on start. Or open it and tap **Send error**.
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+![App](docs/img/app.png)
 
-## Step 3: Modify your app
+## 4. Check it in Sentry
 
-Now that you have successfully run the app, let's make changes!
+**Issues** → `RangeError` from `Intl.NumberFormat` with a bad currency code. Top frame is `formatPrice`
+in `App.tsx`, with the TypeScript source, not the minified bundle:
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+![Stack trace with source map](docs/img/stacktrace.png)
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+## How it works
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+Three places:
 
-## Congratulations! :tada:
+1. `App.tsx`: `Sentry.init({ dsn })` and `export default Sentry.wrap(App)`. `wrap` adds error boundary
+   and touch breadcrumbs.
+2. `metro.config.js`: `withSentryConfig(config)`. It writes a **Debug ID** into the bundle and the
+   source map. Sentry matches them by this id, release name doesn't matter anymore.
+3. `android/app/build.gradle`:
+   ```groovy
+   apply from: new File(["node", "--print", "require.resolve('@sentry/react-native/package.json')"].execute().text.trim(), "../sentry.gradle")
+   ```
+   This hooks into `assembleRelease`: after the JS bundle is built, it uploads bundle + source map.
 
-You've successfully run and modified your React Native App. :partying_face:
+The native side (Java/Kotlin crashes, ANRs) is covered too, `@sentry/react-native` includes the Android
+SDK. Native crashes are sent on next start.
 
-### Now what?
+## CI
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+`.github/workflows/trigger.yml`: `npm ci` → `assembleRelease` (x86_64) → emulator API 34 → deep link with
+the run id. Runs on push and `workflow_dispatch`.
 
-# Troubleshooting
+## Troubleshooting
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+| Symptom | Why |
+|---|---|
+| Stack trace shows `index.android.bundle:1:23456` | Source map not uploaded (no token), or app built from different bundle. Look for "Source Map Upload Report" in the build log. |
+| `node` not found during Gradle build | `sentry.gradle` path is resolved with `node`. Make sure node is in PATH of the shell running Gradle. |
+| Works in debug, not release | In debug the JS is not minified and comes from Metro. Test source maps only with release build. |
