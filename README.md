@@ -61,8 +61,8 @@ The deep link makes the app send one error on start. Or open it and tap **Send e
 
 ## 4. Check it in Sentry
 
-**Issues** → `RangeError` from `Intl.NumberFormat` with a bad currency code. Top frame is `formatPrice`
-in `App.tsx`, with the TypeScript source, not the minified bundle:
+**Issues** → `TypeError: Cannot read property 'discount' of undefined`. Top frame is `applyCoupon` in
+`App.tsx`, with the TypeScript source, not the minified bundle:
 
 ![Stack trace with source map](docs/img/stacktrace.png)
 
@@ -94,4 +94,5 @@ the run id. Runs on push and `workflow_dispatch`.
 |---|---|
 | Stack trace shows `index.android.bundle:1:23456` | Source map not uploaded (no token), or app built from different bundle. Look for "Source Map Upload Report" in the build log. |
 | `node` not found during Gradle build | `sentry.gradle` path is resolved with `node`. Make sure node is in PATH of the shell running Gradle. |
+| Stack is Java frames (`com.facebook.hermes.intl...`) and JS frames are not mapped | Error came from Hermes `Intl`, which on Android is implemented in Java. Sentry gets a Java stack, the source map doesn't apply. First version of this sample had exactly this, so the bug is now a plain JS `TypeError`. |
 | Works in debug, not release | In debug the JS is not minified and comes from Metro. Test source maps only with release build. |

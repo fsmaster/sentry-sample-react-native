@@ -8,9 +8,16 @@ Sentry.init({
   tracesSampleRate: 1.0,
 });
 
-function formatPrice(cents: number, currency: string) {
-  // Intl throws RangeError for a currency code it does not know
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100);
+type Coupon = { code: string; discount: { percent: number } };
+
+const coupons: Record<string, Coupon> = {
+  WELCOME: { code: 'WELCOME', discount: { percent: 10 } },
+};
+
+function applyCoupon(totalCents: number, code: string) {
+  const coupon = coupons[code];
+  // unknown code -> coupon is undefined -> TypeError
+  return totalCents * (1 - coupon.discount.percent / 100);
 }
 
 function sendError(run: string, fresh: boolean) {
@@ -20,7 +27,7 @@ function sendError(run: string, fresh: boolean) {
       scope.setFingerprint(['{{ default }}', run]);
     }
     try {
-      formatPrice(4999, 'EURO-' + run);
+      applyCoupon(4999, 'EXPIRED-' + run);
     } catch (e) {
       return Sentry.captureException(e);
     }
